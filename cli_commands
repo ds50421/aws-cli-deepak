@@ -1,0 +1,25 @@
+echo "========================================All instnaces in prod-f================================"
+aws ec2 describe-instances --query "Reservations[].Instances[].[InstanceId,State.Name,PrivateIpAddress,LaunchTime,Placement.AvailabilityZone,PrivateDnsName,Tags[?Key=='Name'].Value | [0], InstanceType]" --filter Name=tag:stack,Values=prod-f --output table
+echo "=======================================all instnaces in prod-e================================="
+aws ec2 describe-instances --query "Reservations[].Instances[].[InstanceId,State.Name,PrivateIpAddress,LaunchTime,Placement.AvailabilityZone,PrivateDnsName,Tags[?Key=='Name'].Value | [0], InstanceType]" --filter Name=tag:stack,Values=prod-e --output table
+echo "=======================================Status of instnaces in LB linked to prod-e==============================="
+aws elb describe-instance-health --load-balancer-name horizon-aem-prod-e-lb --output table
+echo "=======================================Instnaces linked to App load balancer prod-f============"
+aws elb describe-instance-health --load-balancer-name "horizon-aem-prod-f-lb" --output table
+echo "========================================================current production stack is ================================="
+host author.horizon-prod-paneuropa.horizongo.eu | sed s'/author.horizon-prod-paneuropa.horizongo.eu is an alias for author.horizon-//' | sed s'/.horizongo.eu.//' | head -1
+echo "=======================================Scheduled maintence instaces============================"
+aws ec2 describe-instance-status --filters "Name=event.code,Values='instance-reboot','system-reboot','system-maintenance','instance-retirement','instance-stop'"
+echo "======================================Scheduled maintenece instance name======================="
+aws ec2 describe-instance-status --include-all-instances --filters "Name=event.code,Values=*" --output text --query 'InstanceStatuses[].[InstanceId,Events]'
+echo "======================================Details of PRODUCTION instnaces that are having maintenetce messages============="
+var1=$(aws ec2 describe-instance-status --include-all-instances --filters "Name=event.code,Values=*" --output text --query 'InstanceStatuses[].[InstanceId]')
+aws ec2 describe-instances --instance-id $var1 --query "Reservations[].Instances[].[InstanceId,State.Name,PrivateIpAddress,Tags[?Key=='Name'].Value | [0], InstanceType]" --filter Name=tag:stack,Values=penthera-prod,prod-f,prod-e --output text > instance.txt
+cat instance.txt | grep i-* | sed 's/.running.*//' | sed 's/.stopped.*//' > instances.txt
+for id in $(cat instances.txt); do echo "$id:" && aws ec2 describe-instance-status --instance-id $id --query 'InstanceStatuses[*].Events' --output table;done
+rm -rf instances.txt
+rm -rf instance.txt
+echo "======================================Avalibailty zone status==============================================="
+aws ec2 describe-availability-zones --query "AvailabilityZones[].[RegionName,ZoneName,State]" --output table
+echo "======================================All events related to this account===================================="
+aws health describe-events  --region us-east-1 --query "events[].[service,eventTypeCode,statusCode,eventScopeCode,startTime]" --filter "regions=eu-central-1,eventStatusCodes=[open,upcoming]" --output table
